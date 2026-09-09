@@ -621,7 +621,7 @@ function abrirDetalle(id) {
     <div class="divider"></div>
 
     <div class="section-label">Historial del trabajo (única fuente)</div>
-    ${renderLineaDeTiempo(j)}
+    <div id="historial-auditoria">${renderLineaDeTiempo(j)}</div>
     <div class="divider"></div>
 
     <div class="section-label">1 · Recepción en laboratorio</div>

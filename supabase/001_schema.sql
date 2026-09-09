@@ -120,6 +120,20 @@ declare anterior trabajos; nuevo trabajos; clave text; columna text; begin
  for clave in select jsonb_object_keys(p_cambios) loop columna := case clave when 'fechaEnvio' then 'fecha_envio' when 'fechaEstimada' then 'fecha_estimada' when 'fechaRecepcion' then 'fecha_recepcion' when 'fechaEnvioSucursal' then 'fecha_envio_sucursal' when 'fechaRecepcionSucursal' then 'fecha_recepcion_sucursal' else clave end; insert into auditoria(usuario_id,sucursal_id,accion,entidad,registro_id,campo,valor_anterior,valor_nuevo) values(auth.uid(),nuevo.sucursal_id,'actualizar','trabajos',p_id,clave,to_jsonb(anterior)->columna,to_jsonb(nuevo)->columna); end loop;
  return fila_trabajo(nuevo); end $$;
 
+create or replace function public.historial_trabajo(p_id text)
+returns table(ocurrido_en timestamptz, accion text, campo text, valor_anterior jsonb, valor_nuevo jsonb, usuario text)
+language sql security definer set search_path=public stable as $$
+ select a.ocurrido_en,a.accion,a.campo,a.valor_anterior,a.valor_nuevo,coalesce(p.nombre,'Usuario')
+ from auditoria a
+ left join perfiles p on p.id=a.usuario_id
+ where a.entidad='trabajos' and a.registro_id=p_id
+   and public.tiene_permiso('trabajos.ver')
+   and (public.es_admin() or a.sucursal_id=public.sucursal_actual())
+ order by a.ocurrido_en desc,a.id desc;
+$$;
+revoke execute on function public.historial_trabajo(text) from public, anon;
+grant execute on function public.historial_trabajo(text) to authenticated;
+
 alter table public.trabajos enable row level security; alter table public.opciones enable row level security; alter table public.perfiles enable row level security; alter table public.sucursales enable row level security; alter table public.laboratorios enable row level security; alter table public.auditoria enable row level security;
 create policy trabajos_lectura on public.trabajos for select to authenticated using (public.tiene_permiso('trabajos.ver') and (public.es_admin() or sucursal_id=public.sucursal_actual()));
 create policy opciones_lectura on public.opciones for select to authenticated using (public.tiene_permiso('trabajos.ver'));

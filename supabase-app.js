@@ -122,9 +122,50 @@ async function recargarVista() {
   try { await cargarPagina(); refresh(); setConexion("● En línea", true); } catch (e) { setConexion("● Sin conexión", false); mostrarToast(errorSupabase(e)); }
 }
 async function buscarEnServidor(criterio) {
-  state.trabajosCriterio = criterio; state.trabajosPagina = 1;
+  state.buscarCriterio = criterio;
+  state.trabajosCriterio = criterio;
+  state.trabajosPagina = 1;
   await recargarVista();
 }
+
+const ETIQUETAS_AUDITORIA = {
+  cliente: "Cliente", material: "Material", laboratorio: "Laboratorio", sucursal: "Sucursal",
+  fechaEnvio: "Fecha de envío al laboratorio", fechaEstimada: "Fecha estimada de entrega",
+  fechaRecepcion: "Fecha de recepción del laboratorio", fechaEnvioSucursal: "Fecha de envío a sucursal",
+  fechaRecepcionSucursal: "Fecha de recepción en sucursal", mensajero: "Mensajero"
+};
+function valorAuditoria(valor) {
+  if (valor === null || valor === undefined || valor === "") return "Vacío";
+  if (typeof valor === "string") return valor;
+  return JSON.stringify(valor);
+}
+function fechaHoraAuditoria(valor) {
+  return new Intl.DateTimeFormat("es-DO", { dateStyle: "medium", timeStyle: "short" }).format(new Date(valor));
+}
+function renderHistorialAuditoria(movimientos) {
+  if (!movimientos.length) return '<div style="font-size:12.5px;color:var(--text-muted);">Aún no hay movimientos registrados.</div>';
+  return `<div style="display:flex;flex-direction:column;gap:10px;">${movimientos.map(m => {
+    const esAlta = m.accion === "crear";
+    const titulo = esAlta ? "Trabajo registrado" : `Editó: ${ETIQUETAS_AUDITORIA[m.campo] || m.campo || "Trabajo"}`;
+    const detalle = esAlta ? "Registro creado en el sistema" : `${valorAuditoria(m.valor_anterior)} → ${valorAuditoria(m.valor_nuevo)}`;
+    return `<div class="audit-item"><div class="audit-title">${esc(titulo)}</div><div class="audit-meta">${esc(detalle)}</div><div class="audit-meta">${esc(fechaHoraAuditoria(m.ocurrido_en))} · ${esc(m.usuario || "Usuario")}</div></div>`;
+  }).join("")}</div>`;
+}
+async function cargarHistorialTrabajo(id) {
+  const contenedor = document.getElementById("historial-auditoria");
+  if (!contenedor) return;
+  contenedor.innerHTML = '<div style="font-size:12.5px;color:var(--text-muted);">Cargando historial…</div>';
+  const { data, error } = await sb.rpc("historial_trabajo", { p_id: id });
+  if (!document.getElementById("historial-auditoria")) return;
+  contenedor.innerHTML = error
+    ? '<div style="font-size:12.5px;color:var(--text-muted);">El historial estará disponible después de aplicar la actualización de base de datos.</div>'
+    : renderHistorialAuditoria(data || []);
+}
+const abrirDetalleLegado = abrirDetalle;
+abrirDetalle = function(id) {
+  abrirDetalleLegado(id);
+  cargarHistorialTrabajo(id);
+};
 function suscribirRealtime() {
   realtimeChannel?.unsubscribe();
   realtimeChannel = sb.channel("trabajos-visibles")
