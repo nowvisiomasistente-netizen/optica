@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Óptica — Seguimiento de Trabajos</title>
+<meta name="theme-color" content="#12313A">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark"></div>
+      <div>
+        <div class="brand-name">Óptica</div>
+        <div class="brand-sub">Seguimiento de trabajos</div>
+      </div>
+    </div>
+    <nav class="nav">
+      <button class="nav-item active" data-view="dashboard" onclick="irA('dashboard')"><span class="nav-icon">📊</span> Panel principal</button>
+      <button class="nav-item" data-view="buscar" onclick="irA('buscar')"><span class="nav-icon">🔍</span> Buscar</button>
+      <button class="nav-item" data-view="trabajos" onclick="irA('trabajos')"><span class="nav-icon">🗂️</span> Trabajos y mensajería</button>
+      <button class="nav-item" data-view="informe" onclick="irA('informe')"><span class="nav-icon">📧</span> Informes</button>
+    </nav>
+    <div style="padding:0 12px;margin-top:10px;">
+      <button class="btn small" style="width:100%;" onclick="abrirAdministrarListas('material')">⚙️ Administrar listas</button>
+    </div>
+    <div class="nav-footer">
+      <span id="connection-status">Conectando…</span>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div>
+        <h1 id="page-title">Panel principal</h1>
+        <div class="sub" id="page-sub">Resumen general del sistema</div>
+      </div>
+      <div class="session-bar"><span id="session-user"></span><button class="btn small" id="logout-button" hidden>Cerrar sesión</button></div>
+    </div>
+    <div class="content">
+      <div class="view active" id="view-dashboard"></div>
+      <div class="view" id="view-buscar"></div>
+      <div class="view" id="view-trabajos"></div>
+      <div class="view" id="view-informe"></div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay" onclick="if(event.target===this) cerrarDetalle()">
+  <div class="drawer">
+    <div class="drawer-head">
+      <div>
+        <h3 id="drawer-title">Detalle</h3>
+        <div class="sub" id="drawer-sub"></div>
+      </div>
+      <button class="drawer-close" onclick="cerrarDetalle()">✕</button>
+    </div>
+    <div class="drawer-body" id="drawer-body"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="auth-overlay" id="auth-overlay" hidden>
+  <form class="auth-card" id="login-form">
+    <h2>Óptica</h2><p>Inicie sesión para acceder al sistema.</p>
+    <label>Correo<input id="login-email" type="email" autocomplete="email" required></label>
+    <label>Contraseña<input id="login-password" type="password" autocomplete="current-password" required></label>
+    <button class="btn primary" type="submit">Iniciar sesión</button>
+    <div class="auth-error" id="auth-error"></div>
+  </form>
+</div>
+
+<script src="app.js"></script>
+<script src="supabase-config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.8/dist/umd/supabase.js"></script>
+<script src="supabase-app.js"></script>
+<script>
+  const TITULOS = {
+    dashboard: ["Panel principal", "Resumen general del sistema"],
+    buscar: ["Buscar", "Cliente, material, laboratorio o sucursal"],
+    trabajos: ["Trabajos y mensajería", "Fuente única: datos del trabajo y su traslado a sucursal, todo junto"],
+    informe: ["Informes", "Críticos y envíos del día — listos para enviar por correo"],
+  };
+  const _irA = irA;
+  irA = function (v) {
+    _irA(v);
+    document.getElementById("page-title").textContent = TITULOS[v][0];
+    document.getElementById("page-sub").textContent = TITULOS[v][1];
+  };
+</script>
+</body>
+</html>

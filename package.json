@@ -1,0 +1,6 @@
+{
+  "private": true,
+  "type": "module",
+  "scripts": { "importar": "node scripts/importar-data.mjs data.legacy.json" },
+  "dependencies": { "@supabase/supabase-js": "^2.49.8" }
+}
