@@ -335,6 +335,7 @@ function renderTrabajos() {
         <div class="toolbar">
           <div class="search-box"><span class="ic">🔍</span>
             <input type="text" id="trabajos-input" placeholder="Buscar en la tabla…" value="${escapeAttr(state.trabajosCriterio)}" /></div>
+          <button class="btn" onclick="buscarTrabajosRemoto()">Buscar</button>
           <select id="filtro-estatus">
             <option value="">Todos los estatus</option>
             ${["Pendiente", "Enviado", "Retrasado", "Recibido"].map(s => `<option value="${s}" ${state.trabajosFiltroEstatus === s ? "selected" : ""}>${s}</option>`).join("")}
@@ -378,7 +379,6 @@ function renderTrabajos() {
     </div>
   `;
 
-  document.getElementById("trabajos-input").addEventListener("input", e => { state.trabajosCriterio = e.target.value; state.trabajosPagina = 1; renderTrabajos(); preservarFoco("trabajos-input"); });
   document.getElementById("filtro-estatus").addEventListener("change", e => { state.trabajosFiltroEstatus = e.target.value; state.trabajosPagina = 1; renderTrabajos(); });
   document.getElementById("filtro-sucursal").addEventListener("change", e => { state.trabajosFiltroSucursal = e.target.value; state.trabajosPagina = 1; renderTrabajos(); });
   document.getElementById("filtro-mensajeria").addEventListener("change", e => { state.trabajosFiltroMensajeria = e.target.value; state.trabajosPagina = 1; renderTrabajos(); });
@@ -761,7 +761,7 @@ function adminEliminar(campo, valor) {
 function abrirFormularioNuevo() {
   const body = document.getElementById("drawer-body");
   document.getElementById("drawer-title").textContent = "Registrar trabajo nuevo";
-  document.getElementById("drawer-sub").textContent = "Se guarda en este navegador";
+  document.getElementById("drawer-sub").textContent = "Se guarda de forma centralizada en el sistema";
   body.innerHTML = `
     <div class="field"><label>Cliente *</label><input type="text" id="nf-cliente"></div>
     ${campoConSugerencias("nf-material", "Material", "material", false)}

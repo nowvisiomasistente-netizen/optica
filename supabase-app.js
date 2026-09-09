@@ -19,7 +19,31 @@ function mostrarLogin(error = "") {
 function ocultarLogin() { document.getElementById("auth-overlay").hidden = true; }
 function puede(permiso) { return perfilActual?.rol === "administrador" || (perfilActual?.permisos || []).includes(permiso); }
 function fechaISO(valor) { return valor || null; }
-function normalizarFila(j) { return { ...j, id: j.id, version: j.version }; }
+function normalizarFila(j) {
+  const fila = {
+    ...j,
+    marcaTemporal: j.marcaTemporal ?? j.marca_temporal,
+    fechaEnvio: j.fechaEnvio ?? j.fecha_envio,
+    fechaEstimada: j.fechaEstimada ?? j.fecha_estimada,
+    fechaRecepcion: j.fechaRecepcion ?? j.fecha_recepcion,
+    fechaEnvioSucursal: j.fechaEnvioSucursal ?? j.fecha_envio_sucursal,
+    fechaRecepcionSucursal: j.fechaRecepcionSucursal ?? j.fecha_recepcion_sucursal,
+    id: j.id,
+    version: j.version
+  };
+  const estado = calcularEstatusYTiempo(fila.fechaEnvio, fila.fechaEstimada, fila.fechaRecepcion, new Date());
+  return {
+    ...fila,
+    estatus: j.estatus ?? estado.estatus,
+    estadoTiempo: estado.estadoTiempo,
+    estadoMensajeria: j.estadoMensajeria ?? calcularEstadoMensajeria(estado.estatus, fila.fechaEnvioSucursal, fila.fechaRecepcionSucursal, new Date())
+  };
+}
+
+// En modo Supabase, JOBS ya contiene la página recibida del servidor. No lo
+// reconstruya desde la antigua fuente local vacía.
+const refreshLocalLegado = refresh;
+refresh = function() { renderView(); };
 
 async function cargarPagina({ buscar = state.trabajosCriterio, pagina = state.trabajosPagina, porPagina = state.trabajosPorPagina } = {}) {
   const { data, error } = await sb.rpc("buscar_trabajos", {
@@ -38,6 +62,11 @@ async function cargarResumen() {
   if (error) throw error;
   return data?.[0] || { pendientes: 0, retrasados: 0, recibidos: 0, enviados: 0 };
 }
+async function contarTrabajosRemotos() {
+  const { count, error } = await sb.from("trabajos").select("id", { count: "exact", head: true });
+  if (error) throw error;
+  return count || 0;
+}
 async function cargarOpcionesRemotas() {
   const { data, error } = await sb.from("opciones").select("tipo,valor").eq("activa", true).order("valor");
   if (error) throw error;
@@ -55,7 +84,7 @@ actualizarCampo = async function(id, campo, valor) {
     p_id: id, p_version: actual.version, p_cambios: { [campo]: valor || null }
   });
   if (error) return manejarErrorEdicion(error, id);
-  Object.assign(actual, data); refresh(); abrirDetalle(id); mostrarToast("Cambio guardado.");
+  Object.assign(actual, normalizarFila(data)); refresh(); abrirDetalle(id); mostrarToast("Cambio guardado.");
 };
 function manejarErrorEdicion(error, id) {
   if (error.code === "P0001" && /conflicto/i.test(error.message)) {
@@ -80,7 +109,12 @@ guardarNuevoTrabajo = async function() {
     fecha_estimada: fechaISO(document.getElementById("nf-estimada").value)
   }});
   if (error) return mostrarToast(errorSupabase(error));
-  cerrarDetalle(); await recargarVista(); mostrarToast(`Trabajo ${data.id} registrado.`);
+  state.trabajosCriterio = "";
+  state.trabajosFiltroEstatus = "";
+  state.trabajosFiltroSucursal = "";
+  state.trabajosFiltroMensajeria = "";
+  state.trabajosPagina = 1;
+  cerrarDetalle(); await recargarVista(); mostrarToast(`Trabajo ${data.id} registrado y visible en la lista.`);
 };
 restablecerDatosLocales = function() { localStorage.removeItem("optica_ui_v1"); mostrarToast("Se restablecieron únicamente preferencias locales."); };
 
@@ -107,10 +141,12 @@ ordenarPor = async function(campo) {
   state.trabajosPagina = 1; await recargarVista();
 };
 cambiarPagina = async function(delta) { state.trabajosPagina += delta; await recargarVista(); };
-document.addEventListener("input", e => {
+document.addEventListener("keydown", e => {
   if (!sb || !["buscar-input", "trabajos-input"].includes(e.target.id)) return;
-  clearTimeout(debounceBusqueda);
-  debounceBusqueda = setTimeout(async () => { state.trabajosCriterio = e.target.value; state.trabajosPagina = 1; await recargarVista(); }, 300);
+  if (e.key !== "Enter") return;
+  e.preventDefault();
+  if (e.target.id === "buscar-input") return buscarEnServidor(e.target.value);
+  window.buscarTrabajosRemoto();
 });
 document.addEventListener("change", e => {
   if (!sb || !["filtro-estatus", "filtro-sucursal", "filtro-mensajeria"].includes(e.target.id)) return;
@@ -120,10 +156,32 @@ const renderDashboardLegado = renderDashboard;
 renderDashboard = function() {
   renderDashboardLegado();
   if (!sb) return;
-  cargarResumen().then(r => {
+  Promise.all([cargarResumen(), contarTrabajosRemotos()]).then(([r, total]) => {
     const n = document.querySelectorAll("#view-dashboard .kpi .n");
-    if (n.length >= 4) [r.pendientes,r.retrasados,r.recibidos,r.enviados].forEach((v,i) => n[i].textContent = v);
+    if (n.length >= 8) {
+      [r.pendientes, r.retrasados, r.recibidos, r.enviados].forEach((v, i) => n[i].textContent = v);
+      n[7].textContent = total;
+    }
   }).catch(() => {});
+};
+window.buscarTrabajosRemoto = async function() {
+  const input = document.getElementById("trabajos-input");
+  state.trabajosCriterio = input?.value.trim() || "";
+  state.trabajosPagina = 1;
+  await recargarVista();
+};
+renderBuscar = function() {
+  const el = document.getElementById("view-buscar");
+  const criterio = state.buscarCriterio || "";
+  const resultados = criterio.trim() ? JOBS : [];
+  el.innerHTML = `
+    <div class="panel"><div class="panel-body">
+      <div class="toolbar"><div class="search-box"><span class="ic">🔍</span>
+        <input type="text" id="buscar-input" placeholder="Cliente, material, laboratorio o sucursal…" value="${escapeAttr(criterio)}" autofocus />
+      </div><button class="btn primary" onclick="buscarEnServidor(document.getElementById('buscar-input').value)">Buscar</button></div>
+      ${criterio.trim() ? `<div style="color:var(--text-muted);font-size:12.5px;margin-bottom:8px;">${state.totalRemoto || 0} resultado(s)</div>` : ""}
+      ${renderTablaResultados(resultados, criterio.trim() ? null : "Escriba un criterio y pulse Buscar.")}
+    </div></div>`;
 };
 async function iniciarSupabase() {
   if (!configuracionValida() || !window.supabase) {
