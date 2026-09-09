@@ -260,6 +260,7 @@ input[type=text]:focus, input[type=date]:focus, select:focus {
 .toast.show { display: block; }
 .session-bar { display:flex; gap:10px; align-items:center; font-size:12px; color:var(--text-muted); }
 .auth-overlay { position:fixed; inset:0; z-index:100; display:grid; place-items:center; background:rgba(11,32,39,.6); }
+.auth-overlay[hidden] { display:none !important; }
 .auth-card { width:min(360px,calc(100vw - 32px)); background:#fff; border-radius:var(--radius); padding:28px; box-shadow:0 12px 36px rgba(0,0,0,.22); }
 .auth-card h2 { margin:0; color:var(--primary); }.auth-card p { color:var(--text-muted); margin:6px 0 20px; }
 .auth-card label { display:block; font-size:12px; font-weight:600; color:var(--text-muted); margin:12px 0; }.auth-card input { display:block; width:100%; margin-top:5px; }
