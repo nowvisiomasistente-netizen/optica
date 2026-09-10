@@ -377,7 +377,9 @@ function renderTrabajos() {
                 <button class="btn small" onclick="abrirDetalle('${j.id}')">Ver / Editar</button>
                 ${j.recibidoEnSucursal
                   ? `<button class="btn small received" disabled title="${escapeAttr(`Recibido el ${formatearFechaHora(j.recibidoEnSucursal)} en ${j.sucursalRecibida || j.sucursal}`)}">✓ Recibido</button>`
-                  : `<button class="btn small receive" onclick="confirmarRecepcionTrabajo('${j.id}')" ${j.fechaEnvioSucursal ? "" : "disabled"} title="${j.fechaEnvioSucursal ? "Confirmar recepción en sucursal" : "Registre primero el envío a sucursal"}">Recibir trabajo</button>`}
+                  : j.fechaEnvioSucursal
+                    ? `<button class="btn small receive" onclick="confirmarRecepcionTrabajo('${j.id}')" title="Confirmar recepción en sucursal">Recibir trabajo</button>`
+                    : `<button class="btn small" disabled title="Aún no se ha enviado a la sucursal">Pendiente de envío</button>`}
               </div></td>
             </tr>`).join("") || `<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:30px;">Sin resultados con estos filtros.</td></tr>`}
           </tbody>

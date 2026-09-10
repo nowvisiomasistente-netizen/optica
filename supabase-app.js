@@ -40,7 +40,9 @@ function normalizarFila(j) {
     estatus: fila.recibidoEnSucursal
       ? `Recibido por: ${fila.recibidoPorNombre || "Usuario"}`
       : (j.estatus ?? estado.estatus),
-    estadoTiempo: estado.estadoTiempo,
+    // La entrega confirmada en la sucursal cierra el traslado: la fila debe
+    // reflejarlo como lista, aunque la fecha estimada original haya vencido.
+    estadoTiempo: fila.recibidoEnSucursal ? "Listo" : estado.estadoTiempo,
     estadoMensajeria: j.estadoMensajeria ?? calcularEstadoMensajeria(estado.estatus, fila.fechaEnvioSucursal, fila.fechaRecepcionSucursal, new Date())
   };
 }
@@ -96,7 +98,7 @@ window.confirmarRecepcionTrabajo = async function(id) {
   const actual = JOBS.find(x => x.id === id);
   if (!actual) return;
   if (actual.recibidoEnSucursal) return mostrarToast("Este trabajo ya fue recibido.");
-  if (!actual.fechaEnvioSucursal) return mostrarToast("Primero registre la fecha de envío a sucursal.");
+  if (!actual.fechaEnvioSucursal) return mostrarToast("Este trabajo todavía no se ha enviado a la sucursal.");
   const { data, error } = await sb.rpc("confirmar_recepcion_trabajo", { p_id: id, p_version: actual.version });
   if (error) return manejarErrorEdicion(error, id);
   Object.assign(actual, normalizarFila(data));
