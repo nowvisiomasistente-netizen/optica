@@ -271,8 +271,9 @@ async function entrar(usuario) {
   const { data, error } = await sb.rpc("mi_perfil");
   if (error || !data?.[0]?.activo) return mostrarLogin(error ? errorSupabase(error) : "Su usuario no está activo.");
   perfilActual = { ...data[0], permisos: data[0].permisos || [] };
-  if (!puede("informes.ver")) document.querySelectorAll('[data-view="informe"]').forEach(el => { el.hidden = true; el.style.display = "none"; });
-  if (!puede("catalogos.administrar")) document.querySelectorAll('button[onclick^="abrirAdministrarListas"]').forEach(el => { el.hidden = true; el.style.display = "none"; });
+  const esVentas = perfilActual.rol === "ventas";
+  if (esVentas || !puede("informes.ver")) document.querySelectorAll('[data-view="informe"]').forEach(el => { el.hidden = true; el.style.display = "none"; });
+  if (esVentas || !puede("catalogos.administrar")) document.querySelectorAll('button[onclick^="abrirAdministrarListas"]').forEach(el => { el.hidden = true; el.style.display = "none"; });
   document.getElementById("session-user").textContent = `${perfilActual.nombre || usuario.email} · ${perfilActual.rol} · ${perfilActual.sucursal_nombre || "Sin sucursal"}`;
   document.getElementById("logout-button").hidden = false; ocultarLogin();
   await cargarOpcionesRemotas(); await recargarVista(); suscribirRealtime(); irA("dashboard");
