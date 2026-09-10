@@ -97,7 +97,6 @@ window.confirmarRecepcionTrabajo = async function(id) {
   if (!actual) return;
   if (actual.recibidoEnSucursal) return mostrarToast("Este trabajo ya fue recibido.");
   if (!actual.fechaEnvioSucursal) return mostrarToast("Primero registre la fecha de envío a sucursal.");
-  if (!confirm(`¿Confirmar la recepción de este trabajo en ${actual.sucursal}? Se registrarán la fecha, hora y su usuario.`)) return;
   const { data, error } = await sb.rpc("confirmar_recepcion_trabajo", { p_id: id, p_version: actual.version });
   if (error) return manejarErrorEdicion(error, id);
   Object.assign(actual, normalizarFila(data));
