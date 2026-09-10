@@ -104,6 +104,8 @@ begin
   return fila_trabajo(nuevo);
 end $$;
 
+revoke execute on function public.confirmar_recepcion_trabajo(text,integer) from public, anon;
+grant execute on function public.confirmar_recepcion_trabajo(text,integer) to authenticated;
 revoke execute on function public.crear_trabajo(jsonb) from public, anon;
 grant execute on function public.crear_trabajo(jsonb) to authenticated;
 revoke execute on function public.actualizar_trabajo_versionado(text,integer,jsonb) from public, anon;
