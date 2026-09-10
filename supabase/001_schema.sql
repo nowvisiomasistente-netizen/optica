@@ -40,6 +40,8 @@ create table if not exists public.trabajos (
   marca_temporal date not null default current_date, cliente text not null, material text not null, laboratorio text not null,
   fecha_envio date, fecha_estimada date, fecha_recepcion date, sucursal text not null,
   fecha_envio_sucursal date, mensajero text, fecha_recepcion_sucursal date,
+  recibido_en_sucursal timestamptz, recibido_por uuid references auth.users(id),
+  recibido_por_nombre text, sucursal_recibida text,
   sucursal_id uuid references public.sucursales(id), version integer not null default 1,
   creado_por uuid references auth.users(id), actualizado_por uuid references auth.users(id),
   created_at timestamptz not null default now(), updated_at timestamptz not null default now(),
@@ -119,6 +121,29 @@ declare anterior trabajos; nuevo trabajos; clave text; columna text; begin
  update trabajos set cliente=coalesce(p_cambios->>'cliente',cliente),material=coalesce(p_cambios->>'material',material),laboratorio=coalesce(p_cambios->>'laboratorio',laboratorio),sucursal=coalesce(p_cambios->>'sucursal',sucursal),fecha_envio=case when p_cambios ? 'fechaEnvio' then nullif(p_cambios->>'fechaEnvio','')::date else fecha_envio end,fecha_estimada=case when p_cambios ? 'fechaEstimada' then nullif(p_cambios->>'fechaEstimada','')::date else fecha_estimada end,fecha_recepcion=case when p_cambios ? 'fechaRecepcion' then nullif(p_cambios->>'fechaRecepcion','')::date else fecha_recepcion end,fecha_envio_sucursal=case when p_cambios ? 'fechaEnvioSucursal' then nullif(p_cambios->>'fechaEnvioSucursal','')::date else fecha_envio_sucursal end,fecha_recepcion_sucursal=case when p_cambios ? 'fechaRecepcionSucursal' then nullif(p_cambios->>'fechaRecepcionSucursal','')::date else fecha_recepcion_sucursal end,mensajero=case when p_cambios ? 'mensajero' then nullif(p_cambios->>'mensajero','') else mensajero end,version=version+1,actualizado_por=auth.uid(),updated_at=now() where id=p_id returning * into nuevo;
  for clave in select jsonb_object_keys(p_cambios) loop columna := case clave when 'fechaEnvio' then 'fecha_envio' when 'fechaEstimada' then 'fecha_estimada' when 'fechaRecepcion' then 'fecha_recepcion' when 'fechaEnvioSucursal' then 'fecha_envio_sucursal' when 'fechaRecepcionSucursal' then 'fecha_recepcion_sucursal' else clave end; insert into auditoria(usuario_id,sucursal_id,accion,entidad,registro_id,campo,valor_anterior,valor_nuevo) values(auth.uid(),nuevo.sucursal_id,'actualizar','trabajos',p_id,clave,to_jsonb(anterior)->columna,to_jsonb(nuevo)->columna); end loop;
  return fila_trabajo(nuevo); end $$;
+
+-- Confirma la recepción final en el servidor. La hora y el usuario no se
+-- aceptan desde el navegador, por lo que el registro no puede ser alterado.
+create or replace function public.confirmar_recepcion_trabajo(p_id text,p_version integer) returns jsonb
+language plpgsql security definer set search_path=public as $$
+declare anterior trabajos; nuevo trabajos; nombre_receptor text;
+begin
+ if not tiene_permiso('trabajos.actualizar') then raise exception 'Sin permiso para confirmar recepciones'; end if;
+ select * into anterior from trabajos where id=p_id for update;
+ if not found then raise exception 'Trabajo no encontrado'; end if;
+ if not es_admin() and anterior.sucursal_id is distinct from sucursal_actual() then raise exception 'Sin acceso a esta sucursal'; end if;
+ if anterior.version <> p_version then raise exception 'Conflicto: este trabajo fue modificado por otro usuario'; end if;
+ if anterior.recibido_en_sucursal is not null then raise exception 'Este trabajo ya fue recibido'; end if;
+ if anterior.fecha_envio_sucursal is null then raise exception 'Registre primero el envío a sucursal'; end if;
+ select nombre into nombre_receptor from perfiles where id=auth.uid() and activo;
+ update trabajos set fecha_recepcion_sucursal=current_date,recibido_en_sucursal=now(),recibido_por=auth.uid(),
+   recibido_por_nombre=coalesce(nombre_receptor,'Usuario'),sucursal_recibida=sucursal,version=version+1,
+   actualizado_por=auth.uid(),updated_at=now() where id=p_id returning * into nuevo;
+ insert into auditoria(usuario_id,sucursal_id,accion,entidad,registro_id,campo,valor_anterior,valor_nuevo)
+ values(auth.uid(),nuevo.sucursal_id,'recibir','trabajos',p_id,'recepcion_sucursal',null,
+   jsonb_build_object('recibido_en_sucursal',nuevo.recibido_en_sucursal,'recibido_por',nuevo.recibido_por_nombre,'sucursal',nuevo.sucursal_recibida));
+ return fila_trabajo(nuevo);
+end $$;
 
 create or replace function public.historial_trabajo(p_id text)
 returns table(ocurrido_en timestamptz, accion text, campo text, valor_anterior jsonb, valor_nuevo jsonb, usuario text)

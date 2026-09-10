@@ -132,6 +132,10 @@ function formatearFecha(iso) {
   const [y, m, d] = iso.split("-");
   return `${d}/${m}/${y}`;
 }
+function formatearFechaHora(valor) {
+  if (!valor) return "—";
+  return new Intl.DateTimeFormat("es-DO", { dateStyle: "short", timeStyle: "short" }).format(new Date(valor));
+}
 function hoyISO() { return new Date().toISOString().slice(0, 10); }
 
 /* Recalcula estatus/estadoTiempo/estadoMensajeria para TODOS los trabajos */
@@ -156,7 +160,7 @@ const PILL_CLASS = {
   "Retrasado en Tránsito": "red", "Listo para Enviar": "amber", "N/A": "gray",
 };
 function pill(texto) {
-  const cls = PILL_CLASS[texto] || "gray";
+  const cls = String(texto).startsWith("Recibido por:") ? "green" : (PILL_CLASS[texto] || "gray");
   return `<span class="pill ${cls}">${texto}</span>`;
 }
 
@@ -309,7 +313,10 @@ function renderTrabajos() {
     const c = state.trabajosCriterio;
     filas = filas.filter(j => coincide(j, c).exacto || coincide(j, c).parcial);
   }
-  if (state.trabajosFiltroEstatus) filas = filas.filter(j => j.estatus === state.trabajosFiltroEstatus);
+  if (state.trabajosFiltroEstatus) filas = filas.filter(j =>
+    j.estatus === state.trabajosFiltroEstatus ||
+    (state.trabajosFiltroEstatus === "Recibido" && String(j.estatus).startsWith("Recibido por:"))
+  );
   if (state.trabajosFiltroSucursal) filas = filas.filter(j => j.sucursal === state.trabajosFiltroSucursal);
   if (state.trabajosFiltroMensajeria) filas = filas.filter(j => j.estadoMensajeria === state.trabajosFiltroMensajeria);
 
@@ -366,7 +373,12 @@ function renderTrabajos() {
               <td>${esc(j.cliente)}</td><td>${esc(j.material)}</td><td>${esc(j.laboratorio)}</td><td>${esc(j.sucursal)}</td>
               <td>${formatearFecha(j.fechaEstimada)}</td>
               <td>${pill(j.estatus)}</td><td>${pill(j.estadoTiempo)}</td><td>${pill(j.estadoMensajeria)}</td>
-              <td><button class="btn small" onclick="abrirDetalle('${j.id}')">Ver / Editar</button></td>
+              <td><div class="table-actions">
+                <button class="btn small" onclick="abrirDetalle('${j.id}')">Ver / Editar</button>
+                ${j.recibidoEnSucursal
+                  ? `<button class="btn small received" disabled title="${escapeAttr(`Recibido el ${formatearFechaHora(j.recibidoEnSucursal)} en ${j.sucursalRecibida || j.sucursal}`)}">✓ Recibido</button>`
+                  : `<button class="btn small receive" onclick="confirmarRecepcionTrabajo('${j.id}')" ${j.fechaEnvioSucursal ? "" : "disabled"} title="${j.fechaEnvioSucursal ? "Confirmar recepción en sucursal" : "Registre primero el envío a sucursal"}">Recibir trabajo</button>`}
+              </div></td>
             </tr>`).join("") || `<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:30px;">Sin resultados con estos filtros.</td></tr>`}
           </tbody>
         </table></div>
@@ -656,7 +668,7 @@ function renderLineaDeTiempo(j) {
     { etiqueta: "Enviado al laboratorio", fecha: j.fechaEnvio, detalle: j.laboratorio },
     { etiqueta: "Recibido del laboratorio", fecha: j.fechaRecepcion, detalle: "" },
     { etiqueta: "Enviado a sucursal", fecha: j.fechaEnvioSucursal, detalle: j.mensajero ? `Mensajero: ${j.mensajero}` : "" },
-    { etiqueta: "Recibido en sucursal", fecha: j.fechaRecepcionSucursal, detalle: j.sucursal },
+    { etiqueta: "Recibido en sucursal", fecha: j.recibidoEnSucursal || j.fechaRecepcionSucursal, detalle: j.recibidoEnSucursal ? `${j.recibidoPorNombre || "Usuario"} · ${j.sucursalRecibida || j.sucursal}` : j.sucursal },
   ];
   return `<div style="display:flex;flex-direction:column;gap:0;">
     ${pasos.map((p, i) => `
@@ -667,7 +679,7 @@ function renderLineaDeTiempo(j) {
         </div>
         <div style="padding-bottom:14px;">
           <div style="font-size:13px;font-weight:600;color:${p.fecha ? "var(--text)" : "var(--text-muted)"};">${p.etiqueta}</div>
-          <div style="font-size:12px;color:var(--text-muted);">${p.fecha ? formatearFecha(p.fecha) : "Pendiente"}${p.detalle ? " · " + esc(p.detalle) : ""}</div>
+          <div style="font-size:12px;color:var(--text-muted);">${p.fecha ? (String(p.fecha).includes("T") ? formatearFechaHora(p.fecha) : formatearFecha(p.fecha)) : "Pendiente"}${p.detalle ? " · " + esc(p.detalle) : ""}</div>
         </div>
       </div>
     `).join("")}

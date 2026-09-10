@@ -28,13 +28,18 @@ function normalizarFila(j) {
     fechaRecepcion: j.fechaRecepcion ?? j.fecha_recepcion,
     fechaEnvioSucursal: j.fechaEnvioSucursal ?? j.fecha_envio_sucursal,
     fechaRecepcionSucursal: j.fechaRecepcionSucursal ?? j.fecha_recepcion_sucursal,
+    recibidoEnSucursal: j.recibidoEnSucursal ?? j.recibido_en_sucursal,
+    recibidoPorNombre: j.recibidoPorNombre ?? j.recibido_por_nombre,
+    sucursalRecibida: j.sucursalRecibida ?? j.sucursal_recibida,
     id: j.id,
     version: j.version
   };
   const estado = calcularEstatusYTiempo(fila.fechaEnvio, fila.fechaEstimada, fila.fechaRecepcion, new Date());
   return {
     ...fila,
-    estatus: j.estatus ?? estado.estatus,
+    estatus: fila.recibidoEnSucursal
+      ? `Recibido por: ${fila.recibidoPorNombre || "Usuario"}`
+      : (j.estatus ?? estado.estatus),
     estadoTiempo: estado.estadoTiempo,
     estadoMensajeria: j.estadoMensajeria ?? calcularEstadoMensajeria(estado.estatus, fila.fechaEnvioSucursal, fila.fechaRecepcionSucursal, new Date())
   };
@@ -86,6 +91,19 @@ actualizarCampo = async function(id, campo, valor) {
   if (error) return manejarErrorEdicion(error, id);
   Object.assign(actual, normalizarFila(data)); refresh(); abrirDetalle(id); mostrarToast("Cambio guardado.");
 };
+window.confirmarRecepcionTrabajo = async function(id) {
+  if (!puede("trabajos.actualizar")) return mostrarToast("No tiene permiso para confirmar recepciones.");
+  const actual = JOBS.find(x => x.id === id);
+  if (!actual) return;
+  if (actual.recibidoEnSucursal) return mostrarToast("Este trabajo ya fue recibido.");
+  if (!actual.fechaEnvioSucursal) return mostrarToast("Primero registre la fecha de envío a sucursal.");
+  if (!confirm(`¿Confirmar la recepción de este trabajo en ${actual.sucursal}? Se registrarán la fecha, hora y su usuario.`)) return;
+  const { data, error } = await sb.rpc("confirmar_recepcion_trabajo", { p_id: id, p_version: actual.version });
+  if (error) return manejarErrorEdicion(error, id);
+  Object.assign(actual, normalizarFila(data));
+  refresh();
+  mostrarToast("Recepción confirmada.");
+};
 function manejarErrorEdicion(error, id) {
   if (error.code === "P0001" && /conflicto/i.test(error.message)) {
     mostrarToast("Este trabajo cambió en otra sesión. Se recargó para evitar sobrescribirlo.");
@@ -132,7 +150,8 @@ const ETIQUETAS_AUDITORIA = {
   cliente: "Cliente", material: "Material", laboratorio: "Laboratorio", sucursal: "Sucursal",
   fechaEnvio: "Fecha de envío al laboratorio", fechaEstimada: "Fecha estimada de entrega",
   fechaRecepcion: "Fecha de recepción del laboratorio", fechaEnvioSucursal: "Fecha de envío a sucursal",
-  fechaRecepcionSucursal: "Fecha de recepción en sucursal", mensajero: "Mensajero"
+  fechaRecepcionSucursal: "Fecha de recepción en sucursal", mensajero: "Mensajero",
+  recibidoEnSucursal: "Recepción confirmada", recibidoPorNombre: "Recibido por"
 };
 function valorAuditoria(valor) {
   if (valor === null || valor === undefined || valor === "") return "Vacío";
@@ -146,8 +165,11 @@ function renderHistorialAuditoria(movimientos) {
   if (!movimientos.length) return '<div style="font-size:12.5px;color:var(--text-muted);">Aún no hay movimientos registrados.</div>';
   return `<div style="display:flex;flex-direction:column;gap:10px;">${movimientos.map(m => {
     const esAlta = m.accion === "crear";
-    const titulo = esAlta ? "Trabajo registrado" : `Editó: ${ETIQUETAS_AUDITORIA[m.campo] || m.campo || "Trabajo"}`;
-    const detalle = esAlta ? "Registro creado en el sistema" : `${valorAuditoria(m.valor_anterior)} → ${valorAuditoria(m.valor_nuevo)}`;
+    const esRecepcion = m.accion === "recibir";
+    const titulo = esAlta ? "Trabajo registrado" : (esRecepcion ? "Recepción confirmada" : `Editó: ${ETIQUETAS_AUDITORIA[m.campo] || m.campo || "Trabajo"}`);
+    const detalle = esAlta ? "Registro creado en el sistema" : (esRecepcion
+      ? `Sucursal: ${m.valor_nuevo?.sucursal || "—"}`
+      : `${valorAuditoria(m.valor_anterior)} → ${valorAuditoria(m.valor_nuevo)}`);
     return `<div class="audit-item"><div class="audit-title">${esc(titulo)}</div><div class="audit-meta">${esc(detalle)}</div><div class="audit-meta">${esc(fechaHoraAuditoria(m.ocurrido_en))} · ${esc(m.usuario || "Usuario")}</div></div>`;
   }).join("")}</div>`;
 }
