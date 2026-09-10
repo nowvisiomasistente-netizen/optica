@@ -94,7 +94,7 @@ actualizarCampo = async function(id, campo, valor) {
   Object.assign(actual, normalizarFila(data)); refresh(); abrirDetalle(id); mostrarToast("Cambio guardado.");
 };
 window.confirmarRecepcionTrabajo = async function(id) {
-  if (!puede("trabajos.actualizar")) return mostrarToast("No tiene permiso para confirmar recepciones.");
+  if (!puede("trabajos.recibir")) return mostrarToast("No tiene permiso para confirmar recepciones.");
   const actual = JOBS.find(x => x.id === id);
   if (!actual) return;
   if (actual.recibidoEnSucursal) return mostrarToast("Este trabajo ya fue recibido.");
@@ -187,6 +187,9 @@ async function cargarHistorialTrabajo(id) {
 const abrirDetalleLegado = abrirDetalle;
 abrirDetalle = function(id) {
   abrirDetalleLegado(id);
+  if (!puede("trabajos.actualizar")) {
+    document.querySelectorAll("#drawer-body input").forEach(input => { input.disabled = true; });
+  }
   cargarHistorialTrabajo(id);
 };
 function suscribirRealtime() {
@@ -199,6 +202,13 @@ function suscribirRealtime() {
 /* La tabla conserva su HTML original; estas acciones cambian la página remota
    antes de redibujarla, en vez de filtrar los 6,199 registros en el navegador. */
 const ordenarPorLegado = ordenarPor;
+const renderTrabajosLegado = renderTrabajos;
+renderTrabajos = function() {
+  renderTrabajosLegado();
+  if (puede("trabajos.actualizar") || puede("trabajos.crear")) return;
+  document.querySelectorAll('#view-trabajos button[onclick="abrirFormularioNuevo()"], #view-trabajos button[onclick="exportarCSV()"]').forEach(boton => boton.hidden = true);
+  document.querySelectorAll('#view-trabajos button[onclick^="abrirDetalle("]').forEach(boton => boton.textContent = "Ver");
+};
 ordenarPor = async function(campo) {
   if (state.trabajosOrden.campo === campo) state.trabajosOrden.dir = state.trabajosOrden.dir === "asc" ? "desc" : "asc";
   else state.trabajosOrden = { campo, dir: "asc" };
