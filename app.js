@@ -66,6 +66,7 @@ const state = {
   trabajosFiltroEstatus: "",
   trabajosFiltroSucursal: "",
   trabajosFiltroMensajeria: "",
+  trabajosFiltroEstadoTiempo: "",
   trabajosPagina: 1,
   trabajosPorPagina: 50,
   trabajosOrden: { campo: "marcaTemporal", dir: "desc" },
@@ -319,6 +320,7 @@ function renderTrabajos() {
   );
   if (state.trabajosFiltroSucursal) filas = filas.filter(j => j.sucursal === state.trabajosFiltroSucursal);
   if (state.trabajosFiltroMensajeria) filas = filas.filter(j => j.estadoMensajeria === state.trabajosFiltroMensajeria);
+  if (state.trabajosFiltroEstadoTiempo) filas = filas.filter(j => j.estadoTiempo === state.trabajosFiltroEstadoTiempo);
 
   const { campo, dir } = state.trabajosOrden;
   filas.sort((a, b) => {
@@ -354,6 +356,10 @@ function renderTrabajos() {
           <select id="filtro-mensajeria">
             <option value="">Toda la mensajería</option>
             ${["Listo para Enviar", "En Tránsito a Sucursal", "Retrasado en Tránsito", "Entregado en Sucursal", "N/A"].map(s => `<option value="${s}" ${state.trabajosFiltroMensajeria === s ? "selected" : ""}>${s}</option>`).join("")}
+          </select>
+          <select id="filtro-estado-tiempo">
+            <option value="">Todo el estado tiempo</option>
+            ${["En Tiempo", "Próximo a Vencer", "Retrasado", "Listo"].map(s => `<option value="${s}" ${state.trabajosFiltroEstadoTiempo === s ? "selected" : ""}>${s}</option>`).join("")}
           </select>
           <button class="btn accent" onclick="abrirFormularioNuevo()">+ Nuevo trabajo</button>
           <button class="btn" onclick="exportarCSV()">Exportar CSV</button>
@@ -396,10 +402,11 @@ function renderTrabajos() {
   document.getElementById("filtro-estatus").addEventListener("change", e => { state.trabajosFiltroEstatus = e.target.value; state.trabajosPagina = 1; renderTrabajos(); });
   document.getElementById("filtro-sucursal").addEventListener("change", e => { state.trabajosFiltroSucursal = e.target.value; state.trabajosPagina = 1; renderTrabajos(); });
   document.getElementById("filtro-mensajeria").addEventListener("change", e => { state.trabajosFiltroMensajeria = e.target.value; state.trabajosPagina = 1; renderTrabajos(); });
+  document.getElementById("filtro-estado-tiempo").addEventListener("change", e => { state.trabajosFiltroEstadoTiempo = e.target.value; state.trabajosPagina = 1; renderTrabajos(); });
 }
 function irATrabajosConFiltroMensajeria(valor) {
   state.trabajosFiltroMensajeria = valor;
-  state.trabajosFiltroEstatus = ""; state.trabajosFiltroSucursal = ""; state.trabajosCriterio = ""; state.trabajosPagina = 1;
+  state.trabajosFiltroEstatus = ""; state.trabajosFiltroSucursal = ""; state.trabajosFiltroEstadoTiempo = ""; state.trabajosCriterio = ""; state.trabajosPagina = 1;
   irA("trabajos");
 }
 function ordenarPor(campo) {

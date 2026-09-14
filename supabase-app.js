@@ -49,7 +49,7 @@ function normalizarFila(j) {
       : (j.estatus ?? estado.estatus),
     // La entrega confirmada en la sucursal cierra el traslado: la fila debe
     // reflejarlo como lista, aunque la fecha estimada original haya vencido.
-    estadoTiempo: fila.recibidoEnSucursal ? "Listo" : estado.estadoTiempo,
+    estadoTiempo: fila.recibidoEnSucursal ? "Listo" : (j.estadoTiempo ?? estado.estadoTiempo),
     estadoMensajeria: j.estadoMensajeria ?? calcularEstadoMensajeria(estado.estatus, fila.fechaEnvioSucursal, fila.fechaRecepcionSucursal, new Date())
   };
 }
@@ -63,6 +63,7 @@ async function cargarPagina({ buscar = state.trabajosCriterio, pagina = state.tr
   const { data, error } = await sb.rpc("buscar_trabajos", {
     p_criterio: buscar || null, p_estatus: state.trabajosFiltroEstatus || null,
     p_sucursal: state.trabajosFiltroSucursal || null, p_mensajeria: state.trabajosFiltroMensajeria || null,
+    p_estado_tiempo: state.trabajosFiltroEstadoTiempo || null,
     p_limite: porPagina, p_offset: (pagina - 1) * porPagina,
     p_orden: state.trabajosOrden.campo, p_direccion: state.trabajosOrden.dir
   });
@@ -92,6 +93,15 @@ async function guardarOpcionRemota(tipo, valor, activa) {
   if (error) throw error;
   await cargarOpcionesRemotas();
 }
+
+// En Supabase la lista activa es la fuente de verdad. No se reconstruye desde
+// los trabajos antiguos, pues una sugerencia eliminada reaparecería al recargar.
+const opcionesUnicasLegado = opcionesUnicas;
+opcionesUnicas = function(campo) {
+  if (!sb) return opcionesUnicasLegado(campo);
+  return [...new Set(OPCIONES[campo]?.agregadas || [])]
+    .sort((a, b) => a.localeCompare(b));
+};
 
 /* Escritura atómica con control optimista: el RPC sólo actualiza si la versión
    continúa siendo la que el usuario abrió. */
@@ -223,22 +233,26 @@ abrirFormularioNuevo = async function() {
 agregarOpcion = async function(campo, valor) {
   valor = (valor || "").trim();
   if (!valor) return;
-  try { await guardarOpcionRemota(campo, valor, true); } catch (e) { mostrarToast(errorSupabase(e)); }
+  await guardarOpcionRemota(campo, valor, true);
 };
 eliminarOpcion = async function(campo, valor) {
-  try { await guardarOpcionRemota(campo, valor, false); } catch (e) { mostrarToast(errorSupabase(e)); }
+  await guardarOpcionRemota(campo, valor, false);
 };
 adminAgregar = async function(campo) {
   const input = document.getElementById("admin-nuevo-valor");
   if (!input?.value.trim()) return;
-  await agregarOpcion(campo, input.value);
-  abrirAdministrarListas(campo);
-  mostrarToast("Opción guardada.");
+  try {
+    await agregarOpcion(campo, input.value);
+    abrirAdministrarListas(campo);
+    mostrarToast("Opción guardada.");
+  } catch (e) { mostrarToast(`No se pudo guardar: ${errorSupabase(e)}`); }
 };
 adminEliminar = async function(campo, valor) {
-  await eliminarOpcion(campo, valor);
-  abrirAdministrarListas(campo);
-  mostrarToast("Opción eliminada de las sugerencias.");
+  try {
+    await eliminarOpcion(campo, valor);
+    abrirAdministrarListas(campo);
+    mostrarToast("Opción eliminada de las sugerencias.");
+  } catch (e) { mostrarToast(`No se pudo eliminar: ${errorSupabase(e)}`); }
 };
 const trabajosCriticosLegado = trabajosCriticos;
 trabajosCriticos = function() {
@@ -259,7 +273,7 @@ async function cargarInformeCriticoRemoto() {
 const renderInformeLegado = renderInforme;
 renderInforme = function() {
   renderInformeLegado();
-  if (!sb || state.informeTab !== "critico" || informeCriticosRemotos) return;
+  if (!sb || state.informeTab !== "critico") return;
   cargarInformeCriticoRemoto().then(() => {
     if (state.view === "informe" && state.informeTab === "critico") renderInformeLegado();
   }).catch(e => mostrarToast(errorSupabase(e)));
@@ -285,7 +299,7 @@ document.addEventListener("keydown", e => {
   window.buscarTrabajosRemoto();
 });
 document.addEventListener("change", e => {
-  if (!sb || !["filtro-estatus", "filtro-sucursal", "filtro-mensajeria"].includes(e.target.id)) return;
+  if (!sb || !["filtro-estatus", "filtro-sucursal", "filtro-mensajeria", "filtro-estado-tiempo"].includes(e.target.id)) return;
   setTimeout(() => recargarVista(), 0);
 });
 const renderDashboardLegado = renderDashboard;
