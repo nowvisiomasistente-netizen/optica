@@ -89,6 +89,9 @@
   };
   const _irA = irA;
   irA = function (v) {
+    if (window.vistaPermitida && !window.vistaPermitida(v)) {
+      return irA("trabajos");
+    }
     _irA(v);
     document.getElementById("page-title").textContent = TITULOS[v][0];
     document.getElementById("page-sub").textContent = TITULOS[v][1];

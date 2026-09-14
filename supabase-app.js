@@ -3,6 +3,13 @@
    sustituye data.json/localStorage por Supabase. */
 let sb, perfilActual, realtimeChannel;
 let debounceBusqueda;
+let informeCriticosRemotos = null;
+
+// Se consulta desde el enrutador de la interfaz para que un usuario de Ventas
+// tampoco pueda llegar al panel o a Informes mediante la URL/consola.
+window.vistaPermitida = function(vista) {
+  return !(perfilActual?.rol === "ventas" && ["dashboard", "informe"].includes(vista));
+};
 
 function configuracionValida() {
   return window.OPTICA_SUPABASE && /^https:\/\//.test(OPTICA_SUPABASE.url) && OPTICA_SUPABASE.anonKey;
@@ -79,6 +86,11 @@ async function cargarOpcionesRemotas() {
   if (error) throw error;
   OPCIONES = { material:{agregadas:[],eliminadas:[]}, laboratorio:{agregadas:[],eliminadas:[]}, sucursal:{agregadas:[],eliminadas:[]} };
   (data || []).forEach(x => { if (OPCIONES[x.tipo]) OPCIONES[x.tipo].agregadas.push(x.valor); });
+}
+async function guardarOpcionRemota(tipo, valor, activa) {
+  const { error } = await sb.rpc("guardar_opcion", { p_tipo: tipo, p_valor: valor.trim(), p_activa: activa });
+  if (error) throw error;
+  await cargarOpcionesRemotas();
 }
 
 /* Escritura atómica con control optimista: el RPC sólo actualiza si la versión
@@ -196,12 +208,62 @@ function suscribirRealtime() {
   realtimeChannel?.unsubscribe();
   realtimeChannel = sb.channel("trabajos-visibles")
     .on("postgres_changes", { event: "*", schema: "public", table: "trabajos" }, () => {
+      informeCriticosRemotos = null;
       clearTimeout(debounceBusqueda); debounceBusqueda = setTimeout(recargarVista, 300);
     }).subscribe(status => setConexion(status === "SUBSCRIBED" ? "● En línea" : "● Reconectando…", status === "SUBSCRIBED"));
 }
 /* La tabla conserva su HTML original; estas acciones cambian la página remota
    antes de redibujarla, en vez de filtrar los 6,199 registros en el navegador. */
 const ordenarPorLegado = ordenarPor;
+const abrirFormularioNuevoLegado = abrirFormularioNuevo;
+abrirFormularioNuevo = async function() {
+  try { await cargarOpcionesRemotas(); } catch (e) { mostrarToast(errorSupabase(e)); }
+  abrirFormularioNuevoLegado();
+};
+agregarOpcion = async function(campo, valor) {
+  valor = (valor || "").trim();
+  if (!valor) return;
+  try { await guardarOpcionRemota(campo, valor, true); } catch (e) { mostrarToast(errorSupabase(e)); }
+};
+eliminarOpcion = async function(campo, valor) {
+  try { await guardarOpcionRemota(campo, valor, false); } catch (e) { mostrarToast(errorSupabase(e)); }
+};
+adminAgregar = async function(campo) {
+  const input = document.getElementById("admin-nuevo-valor");
+  if (!input?.value.trim()) return;
+  await agregarOpcion(campo, input.value);
+  abrirAdministrarListas(campo);
+  mostrarToast("Opción guardada.");
+};
+adminEliminar = async function(campo, valor) {
+  await eliminarOpcion(campo, valor);
+  abrirAdministrarListas(campo);
+  mostrarToast("Opción eliminada de las sugerencias.");
+};
+const trabajosCriticosLegado = trabajosCriticos;
+trabajosCriticos = function() {
+  if (!informeCriticosRemotos) return trabajosCriticosLegado();
+  const hoy = new Date();
+  const proximos = [], retrasados = [];
+  informeCriticosRemotos.forEach(j => {
+    const dias = Math.ceil((new Date(`${j.fechaEstimada}T00:00:00`) - hoy) / 86400000);
+    if (dias < 0) retrasados.push(j); else proximos.push(j);
+  });
+  return { proximos, retrasados };
+};
+async function cargarInformeCriticoRemoto() {
+  const { data, error } = await sb.rpc("trabajos_criticos");
+  if (error) throw error;
+  informeCriticosRemotos = (data || []).map(normalizarFila);
+}
+const renderInformeLegado = renderInforme;
+renderInforme = function() {
+  renderInformeLegado();
+  if (!sb || state.informeTab !== "critico" || informeCriticosRemotos) return;
+  cargarInformeCriticoRemoto().then(() => {
+    if (state.view === "informe" && state.informeTab === "critico") renderInformeLegado();
+  }).catch(e => mostrarToast(errorSupabase(e)));
+};
 const renderTrabajosLegado = renderTrabajos;
 renderTrabajos = function() {
   renderTrabajosLegado();
@@ -272,11 +334,17 @@ async function entrar(usuario) {
   if (error || !data?.[0]?.activo) return mostrarLogin(error ? errorSupabase(error) : "Su usuario no está activo.");
   perfilActual = { ...data[0], permisos: data[0].permisos || [] };
   const esVentas = perfilActual.rol === "ventas";
-  if (esVentas || !puede("informes.ver")) document.querySelectorAll('[data-view="informe"]').forEach(el => { el.hidden = true; el.style.display = "none"; });
-  if (esVentas || !puede("catalogos.administrar")) document.querySelectorAll('button[onclick^="abrirAdministrarListas"]').forEach(el => { el.hidden = true; el.style.display = "none"; });
+  const ocultar = (selector, debeOcultarse) => document.querySelectorAll(selector).forEach(el => {
+    el.hidden = debeOcultarse;
+    el.style.display = debeOcultarse ? "none" : "";
+  });
+  ocultar('[data-view="dashboard"], #view-dashboard', esVentas);
+  ocultar('[data-view="informe"], #view-informe', esVentas || !puede("informes.ver"));
+  ocultar('button[onclick^="abrirAdministrarListas"]', esVentas || !puede("catalogos.administrar"));
   document.getElementById("session-user").textContent = `${perfilActual.nombre || usuario.email} · ${perfilActual.rol} · ${perfilActual.sucursal_nombre || "Sin sucursal"}`;
   document.getElementById("logout-button").hidden = false; ocultarLogin();
-  await cargarOpcionesRemotas(); await recargarVista(); suscribirRealtime(); irA("dashboard");
+  state.view = esVentas ? "trabajos" : "dashboard";
+  await cargarOpcionesRemotas(); await recargarVista(); suscribirRealtime(); irA(state.view);
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 }
 document.addEventListener("DOMContentLoaded", () => {
