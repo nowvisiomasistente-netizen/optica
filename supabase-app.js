@@ -195,7 +195,8 @@ const ETIQUETAS_AUDITORIA = {
   fechaEnvio: "Fecha de envío al laboratorio", fechaEstimada: "Fecha estimada de entrega",
   fechaRecepcion: "Fecha de recepción del laboratorio", fechaEnvioSucursal: "Fecha de envío a sucursal",
   fechaRecepcionSucursal: "Fecha de recepción en sucursal", mensajero: "Mensajero",
-  recibidoEnSucursal: "Recepción confirmada", recibidoPorNombre: "Recibido por"
+  recibidoEnSucursal: "Recepción confirmada", recibidoPorNombre: "Recibido por",
+  reiniciar_mensajeria: "Mensajería reiniciada"
 };
 function valorAuditoria(valor) {
   if (valor === null || valor === undefined || valor === "") return "Vacío";
