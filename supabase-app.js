@@ -4,6 +4,7 @@
 let sb, perfilActual, realtimeChannel;
 let debounceBusqueda;
 let informeCriticosRemotos = null;
+let guardandoNuevoTrabajo = false;
 
 // Se consulta desde el enrutador de la interfaz para que un usuario de Ventas
 // tampoco pueda llegar al panel o a Informes mediante la URL/consola.
@@ -140,22 +141,42 @@ async function cargarDetalleActualizado(id) {
 }
 guardarNuevoTrabajo = async function() {
   if (!puede("trabajos.crear")) return mostrarToast("No tiene permiso para crear trabajos.");
+  if (guardandoNuevoTrabajo) return;
   const cliente = document.getElementById("nf-cliente").value.trim();
   const material = document.getElementById("nf-material").value.trim();
   const laboratorio = document.getElementById("nf-laboratorio").value.trim();
   const sucursal = document.getElementById("nf-sucursal").value.trim();
   if (!cliente || !material || !laboratorio || !sucursal) return mostrarToast("Complete cliente, material, laboratorio y sucursal.");
-  const { data, error } = await sb.rpc("crear_trabajo", { p_trabajo: {
-    cliente, material, laboratorio, sucursal, fecha_envio: fechaISO(document.getElementById("nf-envio").value),
-    fecha_estimada: fechaISO(document.getElementById("nf-estimada").value)
-  }});
-  if (error) return mostrarToast(errorSupabase(error));
-  state.trabajosCriterio = "";
-  state.trabajosFiltroEstatus = "";
-  state.trabajosFiltroSucursal = "";
-  state.trabajosFiltroMensajeria = "";
-  state.trabajosPagina = 1;
-  cerrarDetalle(); await recargarVista(); mostrarToast(`Trabajo ${data.id} registrado y visible en la lista.`);
+  const boton = [...document.querySelectorAll("#drawer-body button")]
+    .find(elemento => elemento.textContent.trim() === "Guardar trabajo");
+  guardandoNuevoTrabajo = true;
+  if (boton) { boton.disabled = true; boton.textContent = "Guardando…"; }
+  try {
+    const { data, error } = await sb.rpc("crear_trabajo", { p_trabajo: {
+      cliente, material, laboratorio, sucursal, fecha_envio: fechaISO(document.getElementById("nf-envio").value),
+      fecha_estimada: fechaISO(document.getElementById("nf-estimada").value)
+    }});
+    if (error) throw error;
+
+    state.trabajosCriterio = "";
+    state.trabajosFiltroEstatus = "";
+    state.trabajosFiltroSucursal = "";
+    state.trabajosFiltroMensajeria = "";
+    state.trabajosFiltroEstadoTiempo = "";
+    state.trabajosPagina = 1;
+    JOBS.unshift(normalizarFila(data));
+    state.totalRemoto = Number(state.totalRemoto || 0) + 1;
+    cerrarDetalle();
+    refresh();
+    mostrarToast(`Trabajo ${data.id} guardado.`);
+    // La actualización completa queda en segundo plano: la interfaz no parece bloqueada.
+    setTimeout(() => recargarVista(), 0);
+  } catch (e) {
+    mostrarToast(`No se pudo guardar: ${errorSupabase(e)}`);
+    if (boton) { boton.disabled = false; boton.textContent = "Guardar trabajo"; }
+  } finally {
+    guardandoNuevoTrabajo = false;
+  }
 };
 restablecerDatosLocales = function() { localStorage.removeItem("optica_ui_v1"); mostrarToast("Se restablecieron únicamente preferencias locales."); };
 
@@ -212,7 +233,35 @@ abrirDetalle = function(id) {
   if (!puede("trabajos.actualizar")) {
     document.querySelectorAll("#drawer-body input").forEach(input => { input.disabled = true; });
   }
+  if (perfilActual?.rol === "administrador") {
+    const zonaEliminar = document.createElement("div");
+    zonaEliminar.className = "divider";
+    zonaEliminar.style.marginTop = "22px";
+    zonaEliminar.innerHTML = `<button class="btn" style="width:100%;color:#b42318;border-color:#f0b4ae;" onclick="eliminarTrabajo('${id}')">Eliminar trabajo</button><div style="font-size:11.5px;color:var(--text-muted);margin-top:8px;text-align:center;">Sólo administradores. Se solicitará confirmación.</div>`;
+    document.getElementById("drawer-body").append(zonaEliminar);
+  }
   cargarHistorialTrabajo(id);
+};
+
+window.eliminarTrabajo = async function(id) {
+  if (perfilActual?.rol !== "administrador") return mostrarToast("Sólo los administradores pueden eliminar trabajos.");
+  const actual = JOBS.find(trabajo => trabajo.id === id);
+  if (!actual) return;
+  if (!window.confirm(`¿Eliminar permanentemente el trabajo ${id} de ${actual.cliente}? Esta acción no se puede deshacer.`)) return;
+
+  const boton = document.querySelector(`#drawer-body button[onclick="eliminarTrabajo('${id}')"]`);
+  if (boton) { boton.disabled = true; boton.textContent = "Eliminando…"; }
+  const { error } = await sb.rpc("eliminar_trabajo", { p_id: id, p_version: actual.version });
+  if (error) {
+    if (boton) { boton.disabled = false; boton.textContent = "Eliminar trabajo"; }
+    return manejarErrorEdicion(error, id);
+  }
+  JOBS = JOBS.filter(trabajo => trabajo.id !== id);
+  state.totalRemoto = Math.max(0, Number(state.totalRemoto || 1) - 1);
+  cerrarDetalle();
+  refresh();
+  mostrarToast(`Trabajo ${id} eliminado.`);
+  setTimeout(() => recargarVista(), 0);
 };
 function suscribirRealtime() {
   realtimeChannel?.unsubscribe();
