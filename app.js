@@ -308,6 +308,7 @@ function renderTablaResultados(rows, vacioMsg) {
    ============================================================ */
 function renderTrabajos() {
   const el = document.getElementById("view-trabajos");
+  const esAdministrador = Boolean(window.esAdministradorActual && window.esAdministradorActual());
   let filas = JOBS.slice();
 
   if (state.trabajosCriterio.trim()) {
@@ -381,6 +382,12 @@ function renderTrabajos() {
               <td>${pill(j.estatus)}</td><td>${pill(j.estadoTiempo)}</td><td>${pill(j.estadoMensajeria)}</td>
               <td><div class="table-actions">
                 <button class="btn small" onclick="abrirDetalle('${j.id}')">Ver / Editar</button>
+                ${esAdministrador && !j.fechaRecepcion
+                  ? `<button class="btn small" onclick="recibirDeLaboratorio('${j.id}')" title="Registrar la recepción desde el laboratorio hoy">Recibir de lab</button>`
+                  : ""}
+                ${esAdministrador && j.fechaRecepcion && !j.fechaEnvioSucursal
+                  ? `<button class="btn small primary" onclick="enviarASucursal('${j.id}')" title="Registrar el envío a la sucursal hoy">Enviar a sucursal</button>`
+                  : ""}
                 ${j.recibidoEnSucursal
                   ? `<button class="btn small received" disabled title="${escapeAttr(`Recibido el ${formatearFechaHora(j.recibidoEnSucursal)} en ${j.sucursalRecibida || j.sucursal}`)}">✓ Recibido</button>`
                   : j.fechaEnvioSucursal
@@ -475,6 +482,7 @@ function renderInforme() {
           <h2>Envíos a sucursal del día</h2>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
             <input type="date" id="informe-fecha" value="${state.informeFecha}">
+            <input type="search" id="informe-envios-buscar" placeholder="Buscar en los envíos…" value="${escapeAttr(state.informeEnviosCriterio || "")}">
             <button class="btn accent" onclick="copiarInformeDiario()" ${envios.length === 0 ? "disabled" : ""}>📋 Copiar con formato</button>
             <button class="btn" onclick="abrirGmailInforme('diario')" ${envios.length === 0 ? "disabled" : ""}>✉️ Abrir Gmail</button>
             <button class="btn" onclick="descargarInformeDiarioHTML()" ${envios.length === 0 ? "disabled" : ""}>⬇️ Descargar</button>

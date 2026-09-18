@@ -4,6 +4,9 @@
 let sb, perfilActual, realtimeChannel;
 let debounceBusqueda;
 let informeCriticosRemotos = null;
+let informeEnviosRemotos = [];
+let claveInformeEnvios = "";
+let cargandoInformeEnvios = false;
 let guardandoNuevoTrabajo = false;
 
 // Se consulta desde el enrutador de la interfaz para que un usuario de Ventas
@@ -26,6 +29,7 @@ function mostrarLogin(error = "") {
 }
 function ocultarLogin() { document.getElementById("auth-overlay").hidden = true; }
 function puede(permiso) { return perfilActual?.rol === "administrador" || (perfilActual?.permisos || []).includes(permiso); }
+window.esAdministradorActual = function() { return perfilActual?.rol === "administrador"; };
 function fechaISO(valor) { return valor || null; }
 function normalizarFila(j) {
   const fila = {
@@ -127,6 +131,22 @@ window.confirmarRecepcionTrabajo = async function(id) {
   Object.assign(actual, normalizarFila(data));
   refresh();
   mostrarToast("Recepción confirmada.");
+};
+async function ejecutarMovimientoAdmin(id, rpc, exito) {
+  if (!window.esAdministradorActual()) return mostrarToast("Esta acción sólo está disponible para administradores.");
+  const actual = JOBS.find(x => x.id === id);
+  if (!actual) return;
+  const { data, error } = await sb.rpc(rpc, { p_id: id, p_version: actual.version });
+  if (error) return manejarErrorEdicion(error, id);
+  Object.assign(actual, normalizarFila(data));
+  refresh();
+  mostrarToast(exito);
+}
+window.recibirDeLaboratorio = function(id) {
+  return ejecutarMovimientoAdmin(id, "recibir_de_laboratorio", "Recepción del laboratorio registrada.");
+};
+window.enviarASucursal = function(id) {
+  return ejecutarMovimientoAdmin(id, "enviar_a_sucursal", "Envío a sucursal registrado y guardado en el informe diario.");
 };
 function manejarErrorEdicion(error, id) {
   if (error.code === "P0001" && /conflicto/i.test(error.message)) {
@@ -320,10 +340,40 @@ async function cargarInformeCriticoRemoto() {
   if (error) throw error;
   informeCriticosRemotos = (data || []).map(normalizarFila);
 }
+async function cargarInformeEnviosRemoto() {
+  const fecha = state.informeFecha || hoyISO();
+  const criterio = state.informeEnviosCriterio || "";
+  const clave = `${fecha}|${criterio}`;
+  if (cargandoInformeEnvios || clave === claveInformeEnvios) return;
+  cargandoInformeEnvios = true;
+  claveInformeEnvios = clave;
+  try {
+    const { data, error } = await sb.rpc("envios_sucursal_por_fecha", { p_fecha: fecha, p_criterio: criterio || null });
+    if (error) throw error;
+    if (clave === `${state.informeFecha || hoyISO()}|${state.informeEnviosCriterio || ""}`) informeEnviosRemotos = (data || []).map(normalizarFila);
+  } catch (e) {
+    claveInformeEnvios = "";
+    throw e;
+  } finally { cargandoInformeEnvios = false; }
+}
+const trabajosEnviadosEnFechaLegado = trabajosEnviadosEnFecha;
+trabajosEnviadosEnFecha = function(fecha) { return sb ? informeEnviosRemotos : trabajosEnviadosEnFechaLegado(fecha); };
 const renderInformeLegado = renderInforme;
 renderInforme = function() {
   renderInformeLegado();
-  if (!sb || state.informeTab !== "critico") return;
+  if (!sb || (state.informeTab !== "critico" && state.informeTab !== "diario")) return;
+  if (state.informeTab === "diario") {
+    const buscar = document.getElementById("informe-envios-buscar");
+    if (buscar) buscar.addEventListener("input", e => {
+      state.informeEnviosCriterio = e.target.value.trim(); claveInformeEnvios = "";
+      clearTimeout(debounceBusqueda); debounceBusqueda = setTimeout(() => renderInforme(), 250);
+    });
+    const claveActual = `${state.informeFecha || hoyISO()}|${state.informeEnviosCriterio || ""}`;
+    if (claveActual !== claveInformeEnvios) cargarInformeEnviosRemoto().then(() => {
+      if (state.view === "informe" && state.informeTab === "diario") renderInforme();
+    }).catch(e => mostrarToast(errorSupabase(e)));
+    return;
+  }
   cargarInformeCriticoRemoto().then(() => {
     if (state.view === "informe" && state.informeTab === "critico") renderInformeLegado();
   }).catch(e => mostrarToast(errorSupabase(e)));
