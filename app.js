@@ -13,6 +13,7 @@ const LS_NUEVOS = "optica_nuevos_v1";
 const LS_OPCIONES = "optica_opciones_v1";
 
 const CAMPOS_LISTA = { material: "Material", laboratorio: "Laboratorio", sucursal: "Sucursal" };
+const SUCURSALES_OPERATIVAS = ["Mega Centro", "Romana", "Sam Isidro", "Plaza Lama"];
 let OPCIONES = {}; // { material: {agregadas:[], eliminadas:[]}, laboratorio:{...}, sucursal:{...} }
 
 function cargarOpciones() {
@@ -341,9 +342,17 @@ function renderTrabajos() {
   // actual. Así Plaza Lama y las demás sucursales están disponibles aunque
   // aún no tengan trabajos visibles.
   const sucursales = [...new Set([
+    ...SUCURSALES_OPERATIVAS,
     ...opcionesUnicas("sucursal"),
     ...JOBS.map(j => j.sucursal).filter(Boolean)
   ])].sort((a, b) => a.localeCompare(b));
+  const filtrosActivos = [
+    state.trabajosCriterio,
+    state.trabajosFiltroEstatus,
+    state.trabajosFiltroSucursal,
+    state.trabajosFiltroMensajeria,
+    state.trabajosFiltroEstadoTiempo
+  ].filter(Boolean).length;
 
   el.innerHTML = `
     <div class="panel">
@@ -368,6 +377,7 @@ function renderTrabajos() {
             <option value="">Todo el estado tiempo</option>
             ${["En Tiempo", "Próximo a Vencer", "Retrasado", "Listo"].map(s => `<option value="${s}" ${state.trabajosFiltroEstadoTiempo === s ? "selected" : ""}>${s}</option>`).join("")}
           </select>
+          <button class="btn" ${filtrosActivos ? "" : "disabled"} onclick="limpiarFiltrosTrabajos()">Limpiar filtros${filtrosActivos ? ` (${filtrosActivos})` : ""}</button>
           <button class="btn accent" onclick="abrirFormularioNuevo()">+ Nuevo trabajo</button>
           <button class="btn" onclick="exportarCSV()">Exportar CSV</button>
         </div>
@@ -412,10 +422,26 @@ function renderTrabajos() {
     </div>
   `;
 
-  document.getElementById("filtro-estatus").addEventListener("change", e => { state.trabajosFiltroEstatus = e.target.value; state.trabajosPagina = 1; renderTrabajos(); });
-  document.getElementById("filtro-sucursal").addEventListener("change", e => { state.trabajosFiltroSucursal = e.target.value; state.trabajosPagina = 1; renderTrabajos(); });
-  document.getElementById("filtro-mensajeria").addEventListener("change", e => { state.trabajosFiltroMensajeria = e.target.value; state.trabajosPagina = 1; renderTrabajos(); });
-  document.getElementById("filtro-estado-tiempo").addEventListener("change", e => { state.trabajosFiltroEstadoTiempo = e.target.value; state.trabajosPagina = 1; renderTrabajos(); });
+  document.getElementById("filtro-estatus").addEventListener("change", e => aplicarFiltroTrabajos("trabajosFiltroEstatus", e.target.value));
+  document.getElementById("filtro-sucursal").addEventListener("change", e => aplicarFiltroTrabajos("trabajosFiltroSucursal", e.target.value));
+  document.getElementById("filtro-mensajeria").addEventListener("change", e => aplicarFiltroTrabajos("trabajosFiltroMensajeria", e.target.value));
+  document.getElementById("filtro-estado-tiempo").addEventListener("change", e => aplicarFiltroTrabajos("trabajosFiltroEstadoTiempo", e.target.value));
+}
+function aplicarFiltroTrabajos(campo, valor) {
+  state[campo] = valor;
+  state.trabajosPagina = 1;
+  if (window.aplicarFiltrosRemotos) return window.aplicarFiltrosRemotos();
+  renderTrabajos();
+}
+function limpiarFiltrosTrabajos() {
+  state.trabajosCriterio = "";
+  state.trabajosFiltroEstatus = "";
+  state.trabajosFiltroSucursal = "";
+  state.trabajosFiltroMensajeria = "";
+  state.trabajosFiltroEstadoTiempo = "";
+  state.trabajosPagina = 1;
+  if (window.aplicarFiltrosRemotos) return window.aplicarFiltrosRemotos();
+  renderTrabajos();
 }
 function irATrabajosConFiltroMensajeria(valor) {
   state.trabajosFiltroMensajeria = valor;

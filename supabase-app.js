@@ -398,10 +398,10 @@ document.addEventListener("keydown", e => {
   if (e.target.id === "buscar-input") return buscarEnServidor(e.target.value);
   window.buscarTrabajosRemoto();
 });
-document.addEventListener("change", e => {
-  if (!sb || !["filtro-estatus", "filtro-sucursal", "filtro-mensajeria", "filtro-estado-tiempo"].includes(e.target.id)) return;
-  setTimeout(() => recargarVista(), 0);
-});
+window.aplicarFiltrosRemotos = async function() {
+  if (!sb) return;
+  await recargarVista();
+};
 const renderDashboardLegado = renderDashboard;
 renderDashboard = function() {
   renderDashboardLegado();
