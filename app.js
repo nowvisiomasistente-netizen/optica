@@ -337,7 +337,13 @@ function renderTrabajos() {
   const inicio = (state.trabajosPagina - 1) * state.trabajosPorPagina;
   const pagina = state.totalRemoto == null ? filas.slice(inicio, inicio + state.trabajosPorPagina) : filas;
 
-  const sucursales = [...new Set(JOBS.map(j => j.sucursal).filter(Boolean))].sort();
+  // El filtro se alimenta del catálogo central, no de la página de trabajos
+  // actual. Así Plaza Lama y las demás sucursales están disponibles aunque
+  // aún no tengan trabajos visibles.
+  const sucursales = [...new Set([
+    ...opcionesUnicas("sucursal"),
+    ...JOBS.map(j => j.sucursal).filter(Boolean)
+  ])].sort((a, b) => a.localeCompare(b));
 
   el.innerHTML = `
     <div class="panel">
